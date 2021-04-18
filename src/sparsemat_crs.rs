@@ -4,13 +4,13 @@ use std::ops::MulAssign;
 use std::ops::Add;
 use std::ops::Sub;
 use std::ops::Mul;
-use std::slice::Iter;
 use crate::sparsemat::*;
 use crate::sparsemat_indexlist::*;
 
 // Implementation of a sparse matrix with compressed row storage format
 #[derive(Clone, Debug)]
 pub struct SparseMatCRS<T, I> {
+    n_rows: usize,
     n_cols: usize,
     values: Vec<T>,
     columns: Vec<I>,
@@ -23,20 +23,27 @@ where T: ValueType,
 
     // Create from sparse matrix with index list
     pub fn from_sparsemat_index(rhs: &SparseMatIndexList<T, I>) -> Self {
-        let mut values = Vec::<T>::with_capacity(rhs.n_non_zero_entries());
-        let mut columns = Vec::<I>::with_capacity(rhs.n_non_zero_entries());
-        let mut offset_rows = Vec::<I>::with_capacity(rhs.n_rows() + 1);
-        for i in 0..rhs.n_rows() {
+        if rhs.n_non_zero_entries() > 0 {
+            let mut values = Vec::<T>::with_capacity(rhs.n_non_zero_entries());
+            let mut columns = Vec::<I>::with_capacity(rhs.n_non_zero_entries());
+            let mut offset_rows = Vec::<I>::with_capacity(rhs.n_rows() + 1);
+            for i in 0..rhs.n_rows() {
+                offset_rows.push(I::as_indextype(columns.len()));
+                for (&j, &val) in rhs.iter_row(i) {
+                    columns.push(j);
+                    values.push(val);
+                }
+            }
             offset_rows.push(I::as_indextype(columns.len()));
-            columns.extend(rhs.row_iter_columns(i).map(|x| I::as_indextype(x)));
-            values.extend(rhs.row_iter_values(i));
-        }
-        offset_rows.push(I::as_indextype(columns.len()));
-        SparseMatCRS::<T, I> {
-            n_cols: rhs.n_cols(),
-            values: values,
-            columns: columns,
-            offset_rows: offset_rows,
+            SparseMatCRS::<T, I> {
+                n_rows: offset_rows.len() - 1,
+                n_cols: rhs.n_cols(),
+                values: values,
+                columns: columns,
+                offset_rows: offset_rows,
+            }
+        } else {
+            SparseMatCRS::<T, I>::new()
         }
     }
 
@@ -68,12 +75,12 @@ where T: ValueType,
         } else if i >= self.n_rows() {
             let offset_last = self.offset_rows[self.offset_rows.len() - 1];
             self.offset_rows.resize(i + 2, offset_last);
+            self.n_rows = i + 1;
         }
-        let index = self.offset_rows[i];
-        if index == Self::UNSET {
+        if self.offset_rows[i] == Self::UNSET {
             panic!("Maximum number of {} entries reached", Self::UNSET);
         }
-        let index = index.as_usize();
+        let index = self.offset_rows[i].as_usize();
         self.columns.insert(index, I::as_indextype(j));
         self.values.insert(index, val);
         for k in (i + 1)..self.offset_rows.len() {
@@ -82,32 +89,54 @@ where T: ValueType,
         index
     }
 
-    // Returns an iterator over all non-zero column indices for row
-    pub fn row_iter_columns(&self, row: usize) -> IterColumn<I> {
-        IterColumn::<I> {
-            columns: &self.columns,
-            pos: self.offset_rows[row].as_usize(),
-            end: self.offset_rows[row + 1].as_usize(),
+    /*
+    pub fn mvp2(&self, rhs: &Vec<T>) -> Vec<T> {
+        let mut ret = vec![T::zero(); self.n_rows()];
+        //self.iter().for_each(|(i, &j, &val)| ret[i] += rhs[j.as_usize()] * val);
+        for i in 0..self.n_rows() {
+            let start = self.offset_rows[i];
+            let end = self.offset_rows[i + 1];
+            let mut sum = T::zero();
+            for (j, &val) in self.columns[start..end].iter().zip(self.values[start..end].iter()) {
+                sum += rhs[j.as_usize()] * val;
+            }
+            ret[i] = sum;
         }
+        ret
     }
-
-    // Returns an iterator over all non-zero values for row
-    pub fn row_iter_values(&self, row: usize) -> Iter<T> {
-        let start = self.offset_rows[row].as_usize();
-        let end = self.offset_rows[row + 1].as_usize();
-        self.values.as_slice()[start..end].iter()
-    }
+    */
 }
 
-impl<T, I> SparseMat for SparseMatCRS<T, I>
-where T: ValueType,
-      I: IndexType {
+impl<'a, T, I> SparseMat<'a> for SparseMatCRS<T, I>
+where T: 'a + ValueType,
+      I: 'a + IndexType {
 
     type Value = T;
     type Index = I;
+    type Iter = Iter<'a, T, I>;
+    type IterRow = std::iter::Zip<std::slice::Iter<'a, I>, std::slice::Iter<'a, T>>;
+
+    fn iter(&self) -> Iter::<T, I> {
+        Iter::<T, I> {
+            mat: self,
+            row: 0,
+            pos: I::ZERO,
+        }
+    }
+
+    fn iter_row(&'a self, row: usize) -> Self::IterRow {
+        if row < self.n_rows() {
+            let start = self.offset_rows[row].as_usize();
+            let end = self.offset_rows[row + 1].as_usize();
+            self.columns[start..end].iter().zip(self.values[start..end].iter())
+        } else {
+            self.columns[0..0].iter().zip(self.values[0..0].iter())
+        }
+    }
 
     fn new() -> Self {
         Self {
+            n_rows: 0,
             n_cols: 0,
             values: Vec::<T>::new(),
             columns: Vec::<I>::new(),
@@ -117,6 +146,7 @@ where T: ValueType,
 
     fn with_capacity(cap: usize) -> Self {
         Self {
+            n_rows: 0,
             n_cols: 0,
             values: Vec::<T>::with_capacity(cap),
             columns: Vec::<I>::with_capacity(cap),
@@ -125,11 +155,7 @@ where T: ValueType,
     }
 
     fn n_rows(&self) -> usize {
-        let mut ret = self.offset_rows.len();
-        if ret > 0 {
-            ret -= 1;
-        }
-        ret
+        self.n_rows
     }
 
     fn n_cols(&self) -> usize {
@@ -157,60 +183,36 @@ where T: ValueType,
         &mut self.values[index]
     }
 
-    fn add(&mut self, rhs: &Self) {
-        for i in 0..rhs.n_rows() {
-            for (j, val) in rhs.row_iter_columns(i).zip(rhs.row_iter_values(i)) {
-                *self.get_mut(i, j) += *val;
-            }
-        }
-    }
-
-    fn sub(&mut self, rhs: &Self) {
-        for i in 0..rhs.n_rows() {
-            for (j, val) in rhs.row_iter_columns(i).zip(rhs.row_iter_values(i)) {
-                *self.get_mut(i, j) -= *val;
-            }
-        }
-    }
-
-    fn scale(&mut self, rhs: T) {
+    fn scale(&mut self, rhs: Self::Value) {
         for iter in self.values.iter_mut() {
             *iter *= rhs;
         }
     }
-
-    fn mvp(&self, rhs: &Vec<T>) -> Vec<T> {
-        let mut ret = Vec::<T>::with_capacity(self.n_rows());
-        for i in 0..self.n_rows() {
-            let mut sum = T::zero();
-            for (j, val) in self.row_iter_columns(i).zip(self.row_iter_values(i)) {
-                sum += *val * rhs[j];
-            }
-            ret.push(sum);
-        }
-        ret
-    }
 }
 
-pub struct IterColumn<'a, I> {
-    columns: &'a Vec<I>,
-    pos: usize,
-    end: usize,
+pub struct Iter<'a, T, I> {
+    mat: &'a SparseMatCRS<T, I>,
+    row: usize,
+    pos: I,
 }
 
-impl<'a, I> Iterator for IterColumn<'a, I>
-where I: IndexType {
-    type Item = usize;
+impl<'a, T, I> Iterator for Iter<'a, T, I>
+where T: ValueType,
+      I: IndexType {
+    type Item = (usize, &'a I, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let ret = if self.pos < self.end {
-            let pos_tmp = self.pos;
-            self.pos += 1;
-            Some(self.columns[pos_tmp].as_usize())
+        while self.pos == self.mat.offset_rows[self.row + 1]
+               && self.row < (self.mat.n_rows() - 1) {
+            self.row += 1;
+        }
+        let index = self.pos.as_usize();
+        if index < self.mat.n_non_zero_entries() {
+            self.pos += I::ONE;
+            Some((self.row, &self.mat.columns[index], &self.mat.values[index]))
         } else {
             None
-        };
-        ret
+        }
     }
 }
 

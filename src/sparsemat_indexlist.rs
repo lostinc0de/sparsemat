@@ -4,7 +4,7 @@ use std::ops::MulAssign;
 use std::ops::Add;
 use std::ops::Sub;
 use std::ops::Mul;
-use crate::row_indexlist::*;
+use crate::rowindexlist::*;
 use crate::sparsemat::*;
 
 #[derive(Clone, Debug)]
@@ -12,7 +12,10 @@ pub struct SparseMatIndexList<T, I> {
     n_cols: usize,
     columns: Vec<I>,
     values: Vec<T>,
-    index_list: RowIndexList<I>,
+    indexlist: RowIndexList<I>,
+    track_cols: bool,
+    rows: Vec<I>,
+    indexlist_col: RowIndexList<I>,
 }
 
 impl<T, I> SparseMatIndexList<T, I>
@@ -22,12 +25,15 @@ where T: ValueType,
     // Returns the offset for the columns and values vec
     // or UNSET if entry (i, j) does not exist
     fn find_index(&self, i: usize, j: usize) -> usize {
+        let col = I::as_indextype(j);
         let mut ret = Self::UNSET.as_usize();
-        // Iterate over the index list
-        for index in self.index_list.row_iter(i) {
-            if self.columns[index].as_usize() == j {
-                ret = index;
-                break;
+        if i < self.n_rows() {
+            // Iterate over the index list
+            for index in self.indexlist.iter_row(i) {
+                if self.columns[index] == col {
+                    ret = index;
+                    break;
+                }
             }
         }
         ret
@@ -38,42 +44,61 @@ where T: ValueType,
         if j >= self.n_cols {
             self.n_cols = j + 1;
         }
-        let index = self.index_list.push(i);
+        let index = self.indexlist.push(i);
         self.columns.push(I::as_indextype(j));
         self.values.push(val);
+        if self.track_cols == true {
+            self.rows.push(I::as_indextype(i));
+            self.indexlist_col.push(j);
+        }
         index
     }
 
-    // Returns an iterator over all non-zero column entries for row
-    pub fn row_iter_columns(&self, row: usize) -> IterColumn<I> {
-        IterColumn::<I> {
-            columns: &self.columns,
-            index_iter: self.index_list.row_iter(row),
-        }
-    }
-
-    // Returns an iterator over all non-zero values for row
-    pub fn row_iter_values(&self, row: usize) -> IterValue<T, I> {
-        IterValue::<T, I> {
-            values: &self.values,
-            index_iter: self.index_list.row_iter(row),
+    pub fn with_column_track() -> Self {
+        Self {
+            n_cols: 0,
+            columns: Vec::<I>::new(),
+            values: Vec::<T>::new(),
+            indexlist: RowIndexList::<I>::new(),
+            track_cols: true,
+            rows: Vec::<I>::new(),
+            indexlist_col: RowIndexList::<I>::new(),
         }
     }
 }
 
-impl<T, I> SparseMat for SparseMatIndexList<T, I>
-where T: ValueType,
-      I: IndexType {
+impl<'a, T, I> SparseMat<'a> for SparseMatIndexList<T, I>
+where T: 'a + ValueType,
+      I: 'a + IndexType {
 
     type Value = T;
     type Index = I;
+    type Iter = Iter<'a, T, I>;
+    type IterRow = IterRow<'a, T, I>;
+
+    fn iter(&self) -> Iter<T, I> {
+        Iter::<T, I> {
+            mat: self,
+            index_iter: self.indexlist.iter(),
+        }
+    }
+
+    fn iter_row(&self, row: usize) -> IterRow<T, I> {
+        IterRow::<T, I> {
+            mat: self,
+            index_iter: self.indexlist.iter_row(row),
+        }
+    }
 
     fn new() -> Self {
         Self {
             n_cols: 0,
             columns: Vec::<I>::new(),
             values: Vec::<T>::new(),
-            index_list: RowIndexList::<I>::new(),
+            indexlist: RowIndexList::<I>::new(),
+            track_cols: false,
+            rows: Vec::<I>::new(),
+            indexlist_col: RowIndexList::<I>::new(),
         }
     }
 
@@ -82,12 +107,15 @@ where T: ValueType,
             n_cols: 0,
             columns: Vec::<I>::with_capacity(cap),
             values: Vec::<T>::with_capacity(cap),
-            index_list: RowIndexList::<I>::with_capacity(cap),
+            indexlist: RowIndexList::<I>::with_capacity(cap),
+            track_cols: false,
+            rows: Vec::<I>::new(),
+            indexlist_col: RowIndexList::<I>::new(),
         }
     }
 
     fn n_rows(&self) -> usize {
-        self.index_list.n_rows()
+        self.indexlist.n_rows()
     }
 
     fn n_cols(&self) -> usize {
@@ -115,73 +143,46 @@ where T: ValueType,
         &mut self.values[index]
     }
 
-    fn add(&mut self, rhs: &Self) {
-        for i in 0..rhs.n_rows() {
-            for (j, val) in rhs.row_iter_columns(i).zip(rhs.row_iter_values(i)) {
-                *self.get_mut(i, j) += *val;
-            }
-        }
-    }
-
-    fn sub(&mut self, rhs: &Self) {
-        for i in 0..rhs.n_rows() {
-            for (j, val) in rhs.row_iter_columns(i).zip(rhs.row_iter_values(i)) {
-                *self.get_mut(i, j) -= *val;
-            }
-        }
-    }
-
-    fn scale(&mut self, rhs: T) {
+    fn scale(&mut self, rhs: Self::Value) {
         for iter in self.values.iter_mut() {
             *iter *= rhs;
         }
     }
-
-    fn mvp(&self, rhs: &Vec<T>) -> Vec<T> {
-        let mut ret = Vec::<T>::with_capacity(self.n_rows());
-        for i in 0..self.n_rows() {
-            let mut sum = T::zero();
-            for (j, val) in self.row_iter_columns(i).zip(self.row_iter_values(i)) {
-                sum += *val * rhs[j];
-            }
-            ret.push(sum);
-        }
-        ret
-    }
 }
 
-pub struct IterColumn<'a, I> {
-    columns: &'a Vec<I>,
-    index_iter: crate::row_indexlist::Iter<'a, I>,
+pub struct IterRow<'a, T, I> {
+    mat: &'a SparseMatIndexList<T, I>,
+    index_iter: crate::rowindexlist::IterRow<'a, I>,
 }
 
-impl<'a, I> Iterator for IterColumn<'a, I>
-where I: IndexType {
-    type Item = usize;
+impl<'a, T, I> Iterator for IterRow<'a, T, I>
+where T: ValueType,
+      I: IndexType {
+    type Item = (&'a I, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.index_iter.next() {
             Some(index) => {
-                Some(self.columns[index].as_usize())
+                Some((&self.mat.columns[index], &self.mat.values[index]))
             }
             None => None
         }
     }
 }
 
-pub struct IterValue<'a, T, I> {
-    values: &'a Vec<T>,
-    index_iter: crate::row_indexlist::Iter<'a, I>,
+pub struct Iter<'a, T, I> {
+    mat: &'a SparseMatIndexList<T, I>,
+    index_iter: crate::rowindexlist::Iter<'a, I>,
 }
 
-impl<'a, T, I> Iterator for IterValue<'a, T, I>
+impl<'a, T, I> Iterator for Iter<'a, T, I>
 where I: IndexType {
-    type Item = &'a T;
+    type Item = (usize, &'a I, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.index_iter.next() {
-            Some(index) => {
-                Some(&self.values[index])
+            Some((row, index)) => {
+                Some((row, &self.mat.columns[index], &self.mat.values[index]))
             }
             None => None
         }
