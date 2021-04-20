@@ -1,19 +1,22 @@
-pub mod rowindexlist;
+#[macro_use]
 pub mod sparsemat;
 pub mod sparsemat_indexlist;
 pub mod sparsemat_crs;
 pub mod sparsemat_rowvec;
+pub mod rowindexlist;
 
 #[cfg(test)]
 mod tests {
-    use crate::rowindexlist::*;
     use crate::sparsemat::*;
     use crate::sparsemat_indexlist::*;
     use crate::sparsemat_crs::*;
     use crate::sparsemat_rowvec::*;
+    use crate::rowindexlist::*;
 
     /*
-    fn check_mat<'a, M: 'a + SparseMat<'a, Value = f32, Index = u32>>() {
+    fn check_mat<'a, T, I, M: SparseMat<'a, Value = T, Index = I>>()
+    where T: ValueType,
+          I: IndexType {
         let mut mat = M::new();
         mat.add_to(0, 1, 4.2);
         mat.add_to(1, 2, 4.12);
@@ -37,7 +40,8 @@ mod tests {
     #[test]
     fn check_sparsemat_indexlist() {
         //check_mat::<SparseMatIndexList<f32, u32>>();
-        let mut sp = SparseMatIndexList::<f32, u32>::with_capacity(3);
+        //let mut sp = SparseMatIndexList::<f32, u32>::with_capacity(3);
+        let mut sp = SparseMatIndexList::<f32, u32>::with_column_track();
         sp.add_to(0, 1, 4.2);
         sp.add_to(1, 2, 4.12);
         sp.add_to(2, 2, 2.12);
@@ -64,6 +68,12 @@ mod tests {
         let mvp = sp.clone() * v;
         assert_eq!(mvp[0], 34.544);
         assert_eq!(sp.density(), 6.0 / 9.0);
+
+        let mut iter_col = sp.iter_col(2);
+        assert_eq!(iter_col.next(), Some((&1, &4.12)));
+        assert_eq!(iter_col.next(), Some((&2, &2.12)));
+        assert_eq!(iter_col.next(), Some((&0, &0.12)));
+        assert_eq!(iter_col.next(), None);
     }
 
     #[test]

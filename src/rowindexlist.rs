@@ -20,6 +20,7 @@ use crate::sparsemat::IndexType;
 // index_list = [1, UNSET, UNSET, 5, 6, UNSET, UNSET]
 //                                |       |
 //                                ---->----
+// So the entries for the fourth row are stored at position 4 and 5 in the data vec
 #[derive(Clone, Debug)]
 pub(crate) struct RowIndexList<I> {
     row_start: Vec<I>,

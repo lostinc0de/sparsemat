@@ -5,10 +5,11 @@ use std::ops::Mul;
 use std::cmp::PartialEq;
 use std::cmp::PartialOrd;
 use std::fmt::Display;
+use std::fmt::Debug;
 
 // Trait used for converting the index type to usize and vice versa
 pub trait IndexType
-where Self: Copy + PartialEq + AddAssign + PartialOrd + Display {
+where Self: Copy + PartialEq + AddAssign + PartialOrd + Display + Debug {
     const MAX: Self;
     const ZERO: Self;
     const ONE: Self;
@@ -43,13 +44,13 @@ make_indextype!(usize);
 
 // Shortcut for value type trait bounds
 pub trait ValueType
-where Self: Copy + From<u8> + AddAssign + SubAssign + MulAssign + Mul<Output = Self> + PartialEq + Display {
+where Self: Copy + From<u8> + AddAssign + SubAssign + MulAssign + Mul<Output = Self> + PartialEq + Display + Debug {
     fn zero() -> Self;
     fn one() -> Self;
 }
 
 impl<T> ValueType for T
-where T: Copy + From<u8> + AddAssign + SubAssign + MulAssign + Mul<Output = Self> + PartialEq + Display {
+where T: Copy + From<u8> + AddAssign + SubAssign + MulAssign + Mul<Output = Self> + PartialEq + Display + Debug {
     fn zero() -> Self {
         T::from(0u8)
     }
@@ -187,5 +188,84 @@ where Self: Sized + Clone {
             ret.set(i, i, Self::Value::one());
         }
         ret
+    }
+}
+
+// Since we are unable to implement a foreign trait we provide a macro
+// for implementing all the basic operations for sparse matrix instantiation
+macro_rules! sparsemat_ops {
+    ($Name: ident) => {
+        impl<T, I> AddAssign for $Name<T, I>
+        where T: ValueType,
+              I: IndexType {
+            fn add_assign(&mut self, rhs: Self) {
+                self.add(&rhs);
+            }
+        }
+
+        impl<T, I> SubAssign for $Name<T, I>
+        where T: ValueType,
+              I: IndexType {
+            fn sub_assign(&mut self, rhs: Self) {
+                self.sub(&rhs);
+            }
+        }
+        
+        // Matrix scaling
+        impl<T, I> MulAssign<T> for $Name<T, I>
+        where T: ValueType,
+              I: IndexType {
+            fn mul_assign(&mut self, rhs: T) {
+                self.scale(rhs);
+            }
+        }
+        
+        impl<T, I> Add for $Name<T, I>
+        where T: ValueType,
+              I: IndexType {
+            type Output = Self;
+        
+            fn add(self, rhs: Self) -> Self::Output {
+                let mut ret = self.clone();
+                ret += rhs;
+                ret
+            }
+        }
+        
+        impl<T, I> Sub for $Name<T, I>
+        where T: ValueType,
+              I: IndexType {
+            type Output = Self;
+        
+            fn sub(self, rhs: Self) -> Self::Output {
+                let mut ret = self.clone();
+                ret -= rhs;
+                ret
+            }
+        }
+        
+        // Matrix scaling
+        impl<T, I> Mul<T> for $Name<T, I>
+        where T: ValueType,
+              I: IndexType {
+            type Output = Self;
+        
+            fn mul(self, rhs: T) -> Self::Output {
+                let mut ret = self.clone();
+                ret *= rhs;
+                ret
+            }
+        }
+        
+        // Matrix-Vector multiplication
+        impl<T, I> Mul<Vec<T>> for $Name<T, I>
+        where T: ValueType,
+              I: IndexType {
+            type Output = Vec<T>;
+        
+            fn mul(self, rhs: Vec<T>) -> Self::Output {
+                self.mvp(&rhs)
+            }
+        }
     }
 }

@@ -1,3 +1,9 @@
+use std::ops::AddAssign;
+use std::ops::SubAssign;
+use std::ops::MulAssign;
+use std::ops::Add;
+use std::ops::Sub;
+use std::ops::Mul;
 use crate::sparsemat::*;
 
 // A sparse matrix implementation where each row is stored in separate vec
@@ -153,3 +159,5 @@ where T: ValueType,
         }
     }
 }
+
+sparsemat_ops!(SparseMatRowVec);

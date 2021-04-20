@@ -65,6 +65,13 @@ where T: ValueType,
             indexlist_col: RowIndexList::<I>::new(),
         }
     }
+
+    pub fn iter_col(&self, col: usize) -> IterCol<T, I> {
+        IterCol::<T, I> {
+            mat: self,
+            index_iter: self.indexlist_col.iter_row(col),
+        }
+    }
 }
 
 impl<'a, T, I> SparseMat<'a> for SparseMatIndexList<T, I>
@@ -119,6 +126,9 @@ where T: 'a + ValueType,
     }
 
     fn n_cols(&self) -> usize {
+        if self.n_cols == 0 {
+            //self.n_cols = self.columns.iter().max().unwrap().as_usize();
+        }
         self.n_cols
     }
     
@@ -170,6 +180,26 @@ where T: ValueType,
     }
 }
 
+pub struct IterCol<'a, T, I> {
+    mat: &'a SparseMatIndexList<T, I>,
+    index_iter: crate::rowindexlist::IterRow<'a, I>,
+}
+
+impl<'a, T, I> Iterator for IterCol<'a, T, I>
+where T: ValueType,
+      I: IndexType {
+    type Item = (&'a I, &'a T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.index_iter.next() {
+            Some(index) => {
+                Some((&self.mat.rows[index], &self.mat.values[index]))
+            }
+            None => None
+        }
+    }
+}
+
 pub struct Iter<'a, T, I> {
     mat: &'a SparseMatIndexList<T, I>,
     index_iter: crate::rowindexlist::Iter<'a, I>,
@@ -189,75 +219,4 @@ where I: IndexType {
     }
 }
 
-impl<T, I> AddAssign for SparseMatIndexList<T, I>
-where T: ValueType,
-      I: IndexType {
-    fn add_assign(&mut self, rhs: Self) {
-        self.add(&rhs);
-    }
-}
-
-impl<T, I> SubAssign for SparseMatIndexList<T, I>
-where T: ValueType,
-      I: IndexType {
-    fn sub_assign(&mut self, rhs: Self) {
-        self.sub(&rhs);
-    }
-}
-
-// Matrix scaling
-impl<T, I> MulAssign<T> for SparseMatIndexList<T, I>
-where T: ValueType,
-      I: IndexType {
-    fn mul_assign(&mut self, rhs: T) {
-        self.scale(rhs);
-    }
-}
-
-impl<T, I> Add for SparseMatIndexList<T, I>
-where T: ValueType,
-      I: IndexType {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        let mut ret = self.clone();
-        ret += rhs;
-        ret
-    }
-}
-
-impl<T, I> Sub for SparseMatIndexList<T, I>
-where T: ValueType,
-      I: IndexType {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        let mut ret = self.clone();
-        ret -= rhs;
-        ret
-    }
-}
-
-// Matrix scaling
-impl<T, I> Mul<T> for SparseMatIndexList<T, I>
-where T: ValueType,
-      I: IndexType {
-    type Output = Self;
-
-    fn mul(self, rhs: T) -> Self::Output {
-        let mut ret = self.clone();
-        ret *= rhs;
-        ret
-    }
-}
-
-// Matrix-Vector multiplication
-impl<T, I> Mul<Vec<T>> for SparseMatIndexList<T, I>
-where T: ValueType,
-      I: IndexType {
-    type Output = Vec<T>;
-
-    fn mul(self, rhs: Vec<T>) -> Self::Output {
-        self.mvp(&rhs)
-    }
-}
+sparsemat_ops!(SparseMatIndexList);
