@@ -1,20 +1,25 @@
 #[macro_use]
-pub mod sparsemat;
+pub mod sparsematrix;
 pub mod sparsemat_indexlist;
 pub mod sparsemat_crs;
 pub mod sparsemat_rowvec;
+pub mod types;
 pub mod rowindexlist;
+pub mod vector;
+pub mod sparsevector;
 
 #[cfg(test)]
 mod tests {
-    use crate::sparsemat::*;
+    use crate::sparsematrix::*;
     use crate::sparsemat_indexlist::*;
     use crate::sparsemat_crs::*;
     use crate::sparsemat_rowvec::*;
     use crate::rowindexlist::*;
+    use crate::sparsevector::*;
+    use crate::vector::*;
 
     /*
-    fn check_mat<'a, T, I, M: SparseMat<'a, Value = T, Index = I>>()
+    fn check_mat<'a, T, I, M: SparseMatrix<'a, Value = T, Index = I>>()
     where T: ValueType,
           I: IndexType {
         let mut mat = M::new();
@@ -40,8 +45,7 @@ mod tests {
     #[test]
     fn check_sparsemat_indexlist() {
         //check_mat::<SparseMatIndexList<f32, u32>>();
-        //let mut sp = SparseMatIndexList::<f32, u32>::with_capacity(3);
-        let mut sp = SparseMatIndexList::<f32, u32>::with_column_track();
+        let mut sp = SparseMatIndexList::<f32, u32>::with_capacity(3);
         sp.add_to(0, 1, 4.2);
         sp.add_to(1, 2, 4.12);
         sp.add_to(2, 2, 2.12);
@@ -69,6 +73,8 @@ mod tests {
         assert_eq!(mvp[0], 34.544);
         assert_eq!(sp.density(), 6.0 / 9.0);
 
+        // Test column iter
+        sp.assemble_column_info();
         let mut iter_col = sp.iter_col(2);
         assert_eq!(iter_col.next(), Some((&1, &4.12)));
         assert_eq!(iter_col.next(), Some((&2, &2.12)));
@@ -101,6 +107,7 @@ mod tests {
         let mvp = sp_crs.clone() * v;
         assert_eq!(mvp[0], 20.16);
         assert_eq!(sp_crs.density(), 5.0 / 16.0);
+        //sp.add(&sp_crs);
     }
 
     #[test]
@@ -141,5 +148,18 @@ mod tests {
         assert_eq!(iter.next(), Some(0));
         assert_eq!(iter.next(), Some(1));
         assert_eq!(iter.next(), Some(4));
+    }
+
+    #[test]
+    fn check_sparsevec() {
+        let mut sv = SparseVec::<f64, u16>::new();
+        sv.set(8, 6.0);
+        sv.set(80, 6.4);
+        sv.set(55, 8.2);
+        sv.set(4, 4.0);
+        let mut iter = sv.iter();
+        assert_eq!(iter.next(), Some((&8, &6.0)));
+        assert_eq!(iter.next(), Some((&80, &6.4)));
+        assert_eq!(sv.get(4), 4.0);
     }
 }

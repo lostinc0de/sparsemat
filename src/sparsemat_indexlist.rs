@@ -1,11 +1,6 @@
-use std::ops::AddAssign;
-use std::ops::SubAssign;
-use std::ops::MulAssign;
-use std::ops::Add;
-use std::ops::Sub;
-use std::ops::Mul;
+use crate::types::{IndexType, ValueType};
 use crate::rowindexlist::*;
-use crate::sparsemat::*;
+use crate::sparsematrix::*;
 
 #[derive(Clone, Debug)]
 pub struct SparseMatIndexList<T, I> {
@@ -13,7 +8,6 @@ pub struct SparseMatIndexList<T, I> {
     columns: Vec<I>,
     values: Vec<T>,
     indexlist: RowIndexList<I>,
-    track_cols: bool,
     rows: Vec<I>,
     indexlist_col: RowIndexList<I>,
 }
@@ -47,26 +41,30 @@ where T: ValueType,
         let index = self.indexlist.push(i);
         self.columns.push(I::as_indextype(j));
         self.values.push(val);
-        if self.track_cols == true {
-            self.rows.push(I::as_indextype(i));
-            self.indexlist_col.push(j);
-        }
         index
     }
 
-    pub fn with_column_track() -> Self {
-        Self {
-            n_cols: 0,
-            columns: Vec::<I>::new(),
-            values: Vec::<T>::new(),
-            indexlist: RowIndexList::<I>::new(),
-            track_cols: true,
-            rows: Vec::<I>::new(),
-            indexlist_col: RowIndexList::<I>::new(),
+    pub fn assemble_column_info(&mut self) {
+        // Set up the column iterator if this has not been done yet
+        if self.rows.len() != self.columns.len() {
+            self.rows = vec![Self::UNSET; self.columns.len()];
+            for i in 0..self.n_rows() {
+                for index in self.indexlist.iter_row(i) {
+                    self.rows[index] = I::as_indextype(i);
+                }
+            }
+            for col in self.columns.iter() {
+                let j = col.as_usize();
+                self.indexlist_col.push(j);
+            }
         }
     }
 
     pub fn iter_col(&self, col: usize) -> IterCol<T, I> {
+        // Check if the column info for the iterator is available and consistent
+        if self.rows.len() != self.columns.len() {
+            panic!("Column iterator not available - use assemble_column_info()");
+        }
         IterCol::<T, I> {
             mat: self,
             index_iter: self.indexlist_col.iter_row(col),
@@ -74,7 +72,7 @@ where T: ValueType,
     }
 }
 
-impl<'a, T, I> SparseMat<'a> for SparseMatIndexList<T, I>
+impl<'a, T, I> SparseMatrix<'a> for SparseMatIndexList<T, I>
 where T: 'a + ValueType,
       I: 'a + IndexType {
 
@@ -97,25 +95,12 @@ where T: 'a + ValueType,
         }
     }
 
-    fn new() -> Self {
-        Self {
-            n_cols: 0,
-            columns: Vec::<I>::new(),
-            values: Vec::<T>::new(),
-            indexlist: RowIndexList::<I>::new(),
-            track_cols: false,
-            rows: Vec::<I>::new(),
-            indexlist_col: RowIndexList::<I>::new(),
-        }
-    }
-
     fn with_capacity(cap: usize) -> Self {
         Self {
             n_cols: 0,
             columns: Vec::<I>::with_capacity(cap),
             values: Vec::<T>::with_capacity(cap),
             indexlist: RowIndexList::<I>::with_capacity(cap),
-            track_cols: false,
             rows: Vec::<I>::new(),
             indexlist_col: RowIndexList::<I>::new(),
         }
@@ -126,9 +111,6 @@ where T: 'a + ValueType,
     }
 
     fn n_cols(&self) -> usize {
-        if self.n_cols == 0 {
-            //self.n_cols = self.columns.iter().max().unwrap().as_usize();
-        }
         self.n_cols
     }
     
@@ -172,10 +154,8 @@ where T: ValueType,
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.index_iter.next() {
-            Some(index) => {
-                Some((&self.mat.columns[index], &self.mat.values[index]))
-            }
-            None => None
+            Some(index) => Some((&self.mat.columns[index], &self.mat.values[index])),
+            None => None,
         }
     }
 }
@@ -192,10 +172,8 @@ where T: ValueType,
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.index_iter.next() {
-            Some(index) => {
-                Some((&self.mat.rows[index], &self.mat.values[index]))
-            }
-            None => None
+            Some(index) => Some((&self.mat.rows[index], &self.mat.values[index])),
+            None => None,
         }
     }
 }
@@ -211,10 +189,8 @@ where I: IndexType {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.index_iter.next() {
-            Some((row, index)) => {
-                Some((row, &self.mat.columns[index], &self.mat.values[index]))
-            }
-            None => None
+            Some((row, index)) => Some((row, &self.mat.columns[index], &self.mat.values[index])),
+            None => None,
         }
     }
 }

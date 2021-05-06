@@ -1,66 +1,9 @@
-use std::ops::AddAssign;
-use std::ops::SubAssign;
-use std::ops::MulAssign;
-use std::ops::Mul;
-use std::cmp::PartialEq;
-use std::cmp::PartialOrd;
-use std::fmt::Display;
-use std::fmt::Debug;
+use std::iter::Map;
+use crate::types::{IndexType, ValueType};
+use crate::vector::Vector;
 
-// Trait used for converting the index type to usize and vice versa
-pub trait IndexType
-where Self: Copy + PartialEq + AddAssign + PartialOrd + Display + Debug {
-    const MAX: Self;
-    const ZERO: Self;
-    const ONE: Self;
-    fn as_usize(&self) -> usize;
-    fn as_indextype(index: usize) -> Self;
-}
-
-macro_rules! make_indextype {
-    ( $t:ty ) => {
-        impl IndexType for $t {
-            const MAX: $t = <$t>::MAX;
-            const ZERO: $t = 0 as $t;
-            const ONE: $t = 1 as $t;
-            // For some reason these functions are not inlined by default
-            // and performance is pretty low without the hint
-            #[inline]
-            fn as_usize(&self) -> usize {
-                *self as usize
-            }
-            #[inline]
-            fn as_indextype(index: usize) -> $t {
-                index as $t
-            }
-        }
-    }
-}
-
-make_indextype!(u8);
-make_indextype!(u16);
-make_indextype!(u32);
-make_indextype!(usize);
-
-// Shortcut for value type trait bounds
-pub trait ValueType
-where Self: Copy + From<u8> + AddAssign + SubAssign + MulAssign + Mul<Output = Self> + PartialEq + Display + Debug {
-    fn zero() -> Self;
-    fn one() -> Self;
-}
-
-impl<T> ValueType for T
-where T: Copy + From<u8> + AddAssign + SubAssign + MulAssign + Mul<Output = Self> + PartialEq + Display + Debug {
-    fn zero() -> Self {
-        T::from(0u8)
-    }
-    fn one() -> Self {
-        T::from(1u8)
-    }
-}
-
-// Interface for sparse matrix types
-pub trait SparseMat<'a>
+// Interface for row major sparse matrix types
+pub trait SparseMatrix<'a>
 where Self: Sized + Clone {
     type Value: 'a + ValueType;
     type Index: 'a + IndexType;
@@ -72,20 +15,22 @@ where Self: Sized + Clone {
     fn iter(&'a self) -> Self::Iter;
     fn iter_row(&'a self, row: usize) -> Self::IterRow;
 
-    //type IterVal = std::iter::Map<Self::Iter, fn((&'a Self::Index, &'a Self::Value)) -> (usize, usize, Self::Value)>;
-    //fn iter_val(&'a self) -> impl Iterator<Item = (usize, usize, Self::Value)> {
-    //    self.iter().map(|(i, &j, &val)| (i, j.as_usize(), val))
-    //}
+    // Iterator for accessing all elements as values instead of references
+    fn iter_val(&'a self) -> Map<Self::Iter, fn((usize, &'a Self::Index, &'a Self::Value)) -> (usize, usize, Self::Value)> {
+        self.iter().map(|(i, &j, &val)| (i, j.as_usize(), val))
+    }
 
     // Constant used to identify an empty entry
     const UNSET: Self::Index = Self::Index::MAX;
 
-    // Creates an empty sparse matrix
-    fn new() -> Self;
-
     // Creates a new sparse matrix with reserved space for cap non-zero entries
     // Useful for reducing allocations if the size is known
     fn with_capacity(cap: usize) -> Self;
+
+    // Creates an empty sparse matrix
+    fn new() -> Self {
+        Self::with_capacity(0)
+    }
 
     // Returns the number of rows
     fn n_rows(&self) -> usize;
@@ -99,39 +44,86 @@ where Self: Sized + Clone {
     // Returns the value at (i, j) or zero if it does not exist
     fn get(&self, i: usize, j: usize) -> Self::Value;
 
+    // Returns the value at (i, j) as a reference
+    // and adds it if the entry does not exist yet
+    fn get_mut(&mut self, i: usize, j: usize) -> &mut Self::Value;
+
     // Adds another sparse matrix
     fn add(&'a mut self, rhs: &'a Self) {
-        rhs.iter().for_each(|(i, &j, &val)| *self.get_mut(i, j.as_usize()) += val);
-        //for i in 0..rhs.n_rows() {
-        //    for (&col, &val) in rhs.iter_row(i) {
-        //        let j = col.as_usize();
-        //        *self.get_mut(i, j) += val;
-        //    }
-        //}
+        for i in 0..rhs.n_rows() {
+            for (&col, &val) in rhs.iter_row(i) {
+                let j = col.as_usize();
+                *self.get_mut(i, j) += val;
+            }
+        }
     }
 
     // Subtracts another sparse matrix
     fn sub(&'a mut self, rhs: &'a Self) {
-        rhs.iter().for_each(|(i, &j, &val)| *self.get_mut(i, j.as_usize()) -= val);
+        for i in 0..rhs.n_rows() {
+            for (&col, &val) in rhs.iter_row(i) {
+                let j = col.as_usize();
+                *self.get_mut(i, j) -= val;
+            }
+        }
     }
 
     // Performs a matrix-vector product
-    fn mvp(&'a self, rhs: &Vec<Self::Value>) -> Vec<Self::Value> {
-        let mut ret = vec![Self::Value::zero(); self.n_rows()];
-        self.iter().for_each(|(i, &j, &val)| ret[i] += rhs[j.as_usize()] * val);
+    fn mvp<V: Vector<'a, Value = Self::Value>>(&'a self, rhs: &V) -> V {
+        let mut ret = V::with_capacity(self.n_rows());
+        //self.iter().for_each(|(i, &j, &val)| ret.add_to(i, rhs.get(j.as_usize()) * val));
         //for (i, &j, &val) in self.iter() {
-        //    ret[i] += rhs[j.as_usize()] * val;
+        //   ret.add_to(i, rhs.get(j.as_usize()) * val);
         //}
-        //let mut ret = Vec::<Self::Value>::with_capacity(self.n_rows());
-        //for i in 0..self.n_rows() {
-        //    let mut sum = Self::Value::zero();
-        //    for (&j, &val) in self.iter_row(i) {
-        //        sum += rhs[j.as_usize()] * val;
-        //    }
-        //    ret.push(sum);
-        //}
+        for i in 0..self.n_rows() {
+            let mut sum = Self::Value::zero();
+            for (&col, &val) in self.iter_row(i) {
+                let j = col.as_usize();
+                sum += rhs.get(j) * val;
+            }
+            ret.set(i, sum);
+        }
         ret
     }
+
+    /*
+    // Performs a parallel matrix-vector product
+    fn mvp_parallel<V: Vector<'a, Value = Self::Value> + Send + Sync>(&'a self, rhs: &V) -> V
+    where Self: Send + Sync {
+        let n_threads = 4;
+        let mut v = Vec::<V>::with_capacity(n_threads);
+        let size = self.n_rows() / n_threads;
+        for _ in 0..n_threads {
+            v.push(V::with_capacity(size));
+        }
+        let mut handles = vec![];
+        for t in 0..n_threads {
+            let handle = thread::spawn(move || {
+                let offset = t * size;
+                for i in offset..offset + size {
+                    let mut sum = Self::Value::zero();
+                    for (&col, &val) in self.iter_row(i) {
+                        let j = col.as_usize();
+                        sum += rhs.get(j) * val;
+                    }
+                    v[t].set(i - offset, sum);
+                }
+            });
+            handles.push(handle);
+        }
+        for handle in handles {
+            handle.join().unwrap();
+        }
+        let mut ret = V::with_capacity(self.n_rows());
+        for t in 0..n_threads {
+            let offset = t * size;
+            for i in 0..size {
+                ret.set(offset + i, v[t].get(i));
+            }
+        }
+        ret
+    }
+    */
 
     // Returns the transpose of this matrix
     fn transpose(&'a self) -> Self {
@@ -154,10 +146,6 @@ where Self: Sized + Clone {
 
     // Scales all values by a factor
     fn scale(&mut self, rhs: Self::Value);
-
-    // Returns the value at (i, j) as a reference
-    // and adds it if the entry does not exist yet
-    fn get_mut(&mut self, i: usize, j: usize) -> &mut Self::Value;
 
     // Sets value at (i, j) to val
     fn set(&mut self, i: usize, j: usize, val: Self::Value) {
@@ -195,7 +183,7 @@ where Self: Sized + Clone {
 // for implementing all the basic operations for sparse matrix instantiation
 macro_rules! sparsemat_ops {
     ($Name: ident) => {
-        impl<T, I> AddAssign for $Name<T, I>
+        impl<T, I> std::ops::AddAssign for $Name<T, I>
         where T: ValueType,
               I: IndexType {
             fn add_assign(&mut self, rhs: Self) {
@@ -203,7 +191,7 @@ macro_rules! sparsemat_ops {
             }
         }
 
-        impl<T, I> SubAssign for $Name<T, I>
+        impl<T, I> std::ops::SubAssign for $Name<T, I>
         where T: ValueType,
               I: IndexType {
             fn sub_assign(&mut self, rhs: Self) {
@@ -212,7 +200,7 @@ macro_rules! sparsemat_ops {
         }
         
         // Matrix scaling
-        impl<T, I> MulAssign<T> for $Name<T, I>
+        impl<T, I> std::ops::MulAssign<T> for $Name<T, I>
         where T: ValueType,
               I: IndexType {
             fn mul_assign(&mut self, rhs: T) {
@@ -220,7 +208,7 @@ macro_rules! sparsemat_ops {
             }
         }
         
-        impl<T, I> Add for $Name<T, I>
+        impl<T, I> std::ops::Add for $Name<T, I>
         where T: ValueType,
               I: IndexType {
             type Output = Self;
@@ -232,7 +220,7 @@ macro_rules! sparsemat_ops {
             }
         }
         
-        impl<T, I> Sub for $Name<T, I>
+        impl<T, I> std::ops::Sub for $Name<T, I>
         where T: ValueType,
               I: IndexType {
             type Output = Self;
@@ -245,7 +233,7 @@ macro_rules! sparsemat_ops {
         }
         
         // Matrix scaling
-        impl<T, I> Mul<T> for $Name<T, I>
+        impl<T, I> std::ops::Mul<T> for $Name<T, I>
         where T: ValueType,
               I: IndexType {
             type Output = Self;
@@ -258,7 +246,7 @@ macro_rules! sparsemat_ops {
         }
         
         // Matrix-Vector multiplication
-        impl<T, I> Mul<Vec<T>> for $Name<T, I>
+        impl<T, I> std::ops::Mul<Vec<T>> for $Name<T, I>
         where T: ValueType,
               I: IndexType {
             type Output = Vec<T>;

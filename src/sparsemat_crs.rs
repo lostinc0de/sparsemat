@@ -1,10 +1,5 @@
-use std::ops::AddAssign;
-use std::ops::SubAssign;
-use std::ops::MulAssign;
-use std::ops::Add;
-use std::ops::Sub;
-use std::ops::Mul;
-use crate::sparsemat::*;
+use crate::types::{IndexType, ValueType};
+use crate::sparsematrix::*;
 use crate::sparsemat_indexlist::*;
 
 // Implementation of a sparse matrix with compressed row storage format
@@ -88,26 +83,9 @@ where T: ValueType,
         }
         index
     }
-
-    /*
-    pub fn mvp2(&self, rhs: &Vec<T>) -> Vec<T> {
-        let mut ret = vec![T::zero(); self.n_rows()];
-        //self.iter().for_each(|(i, &j, &val)| ret[i] += rhs[j.as_usize()] * val);
-        for i in 0..self.n_rows() {
-            let start = self.offset_rows[i];
-            let end = self.offset_rows[i + 1];
-            let mut sum = T::zero();
-            for (j, &val) in self.columns[start..end].iter().zip(self.values[start..end].iter()) {
-                sum += rhs[j.as_usize()] * val;
-            }
-            ret[i] = sum;
-        }
-        ret
-    }
-    */
 }
 
-impl<'a, T, I> SparseMat<'a> for SparseMatCRS<T, I>
+impl<'a, T, I> SparseMatrix<'a> for SparseMatCRS<T, I>
 where T: 'a + ValueType,
       I: 'a + IndexType {
 
@@ -131,16 +109,6 @@ where T: 'a + ValueType,
             self.columns[start..end].iter().zip(self.values[start..end].iter())
         } else {
             self.columns[0..0].iter().zip(self.values[0..0].iter())
-        }
-    }
-
-    fn new() -> Self {
-        Self {
-            n_rows: 0,
-            n_cols: 0,
-            values: Vec::<T>::new(),
-            columns: Vec::<I>::new(),
-            offset_rows: Vec::<I>::new(),
         }
     }
 

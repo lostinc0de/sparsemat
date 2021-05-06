@@ -1,10 +1,11 @@
-use crate::sparsemat::IndexType;
+use crate::types::IndexType;
 
 // Stores indices for each row for tracking the entries in the sparse matrix data vec
 // The vec index_list contains the next positions in the list while the vec row_start
 // contains the starting position for each row
 // The position in the index_list vec is the actual index
-// Example: row_start  = [0, 2, UNSET, 4, 3]
+// Example: row index:    0  1    2    3  4
+//          row_start  = [0, 2, UNSET, 4, 3]
 //          index_list = [1, UNSET, UNSET, 5, 6, UNSET, UNSET]
 //          -> First row holds two entries at position 0 and 1
 //          -> Second row only holds one entry at position 2
@@ -83,14 +84,9 @@ where I: IndexType {
     }
 
     pub(crate) fn iter_row(&self, row: usize) -> IterRow<I> {
-        let start = if row < self.n_rows() {
-            self.row_start[row]
-        } else {
-            Self::UNSET
-        };
         IterRow::<I> {
             list: self,
-            pos: start,
+            pos: self.row_start[row],
         }
     }
 

@@ -1,10 +1,5 @@
-use std::ops::AddAssign;
-use std::ops::SubAssign;
-use std::ops::MulAssign;
-use std::ops::Add;
-use std::ops::Sub;
-use std::ops::Mul;
-use crate::sparsemat::*;
+use crate::types::{IndexType, ValueType};
+use crate::sparsematrix::*;
 
 // A sparse matrix implementation where each row is stored in separate vec
 // This implementation makes at least two allocations each row
@@ -52,7 +47,7 @@ where T: ValueType,
     }
 }
 
-impl<'a, T, I> SparseMat<'a> for SparseMatRowVec<T, I>
+impl<'a, T, I> SparseMatrix<'a> for SparseMatRowVec<T, I>
 where T: 'a + ValueType,
       I: 'a + IndexType {
 
@@ -74,15 +69,6 @@ where T: 'a + ValueType,
             self.columns[row].iter().zip(self.values[row].iter())
         } else {
             panic!("Invalid row {} - Max row is {}", row, self.n_rows());
-        }
-    }
-
-    fn new() -> Self {
-        Self {
-            n_cols: 0,
-            nnz: 0,
-            values: Vec::<Vec::<T>>::new(),
-            columns: Vec::<Vec::<I>>::new(),
         }
     }
 
