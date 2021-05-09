@@ -80,6 +80,10 @@ mod tests {
         assert_eq!(iter_col.next(), Some((&2, &2.12)));
         assert_eq!(iter_col.next(), Some((&0, &0.12)));
         assert_eq!(iter_col.next(), None);
+
+        sp.sort_row(1);
+        let row_str = sp.to_string_row(1);
+        assert_eq!(row_str, "0 2.24 4.12 ");
     }
 
     #[test]

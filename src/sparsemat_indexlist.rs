@@ -70,6 +70,15 @@ where T: ValueType,
             index_iter: self.indexlist_col.iter_row(col),
         }
     }
+
+    pub fn sort_row(&mut self, i: usize) {
+        let mut cols_vals = self.iter_row(i).map(|(&c, &v)| (c, v)).collect::<Vec<(I, T)>>();
+        cols_vals.as_mut_slice().sort_by(|(c1, _v1), (c2, _v2)| c1.partial_cmp(c2).unwrap());
+        for ((col, val), index) in cols_vals.iter().zip(self.indexlist.iter_row(i)) {
+            self.columns[index] = *col;
+            self.values[index] = *val;
+        }
+    }
 }
 
 impl<'a, T, I> SparseMatrix<'a> for SparseMatIndexList<T, I>

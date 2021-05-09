@@ -1,4 +1,5 @@
 use std::iter::Map;
+use std::string::String;
 use crate::types::{IndexType, ValueType};
 use crate::vector::Vector;
 
@@ -30,6 +31,15 @@ where Self: Sized + Clone {
     // Creates an empty sparse matrix
     fn new() -> Self {
         Self::with_capacity(0)
+    }
+
+    // Returns the identity matrix with dimension dim
+    fn eye(dim: usize) -> Self {
+        let mut ret = Self::with_capacity(dim);
+        for i in 0..dim {
+            ret.set(i, i, Self::Value::one());
+        }
+        ret
     }
 
     // Returns the number of rows
@@ -86,45 +96,6 @@ where Self: Sized + Clone {
         ret
     }
 
-    /*
-    // Performs a parallel matrix-vector product
-    fn mvp_parallel<V: Vector<'a, Value = Self::Value> + Send + Sync>(&'a self, rhs: &V) -> V
-    where Self: Send + Sync {
-        let n_threads = 4;
-        let mut v = Vec::<V>::with_capacity(n_threads);
-        let size = self.n_rows() / n_threads;
-        for _ in 0..n_threads {
-            v.push(V::with_capacity(size));
-        }
-        let mut handles = vec![];
-        for t in 0..n_threads {
-            let handle = thread::spawn(move || {
-                let offset = t * size;
-                for i in offset..offset + size {
-                    let mut sum = Self::Value::zero();
-                    for (&col, &val) in self.iter_row(i) {
-                        let j = col.as_usize();
-                        sum += rhs.get(j) * val;
-                    }
-                    v[t].set(i - offset, sum);
-                }
-            });
-            handles.push(handle);
-        }
-        for handle in handles {
-            handle.join().unwrap();
-        }
-        let mut ret = V::with_capacity(self.n_rows());
-        for t in 0..n_threads {
-            let offset = t * size;
-            for i in 0..size {
-                ret.set(offset + i, v[t].get(i));
-            }
-        }
-        ret
-    }
-    */
-
     // Returns the transpose of this matrix
     fn transpose(&'a self) -> Self {
         let mut ret = Self::with_capacity(self.n_non_zero_entries());
@@ -169,11 +140,19 @@ where Self: Sized + Clone {
         1.0f64 - self.density()
     }
 
-    // Returns the identity matrix with dimension dim
-    fn eye(dim: usize) -> Self {
-        let mut ret = Self::with_capacity(dim);
-        for i in 0..dim {
-            ret.set(i, i, Self::Value::one());
+    // Returns a string with all values of row i including the zeroes
+    // The entries have to be sorted first, otherwise the output will be corrupted
+    fn to_string_row(&'a self, i: usize) -> String {
+        let mut ret = String::from("");
+        let mut j = Self::Index::ZERO;
+        for (&col, &val) in self.iter_row(i) {
+            while j < col {
+                ret += "0 ";
+                j += Self::Index::ONE;
+            }
+            ret += &val.to_string();
+            ret += " ";
+            j += Self::Index::ONE;
         }
         ret
     }
