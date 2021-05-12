@@ -59,7 +59,8 @@ where Self: Sized + Clone {
     fn get_mut(&mut self, i: usize, j: usize) -> &mut Self::Value;
 
     // Adds another sparse matrix
-    fn add(&'a mut self, rhs: &'a Self) {
+    fn add<S>(&'a mut self, rhs: &'a S)
+    where S: SparseMatrix<'a, Value = Self::Value> {
         for i in 0..rhs.n_rows() {
             for (&col, &val) in rhs.iter_row(i) {
                 let j = col.as_usize();
@@ -69,7 +70,8 @@ where Self: Sized + Clone {
     }
 
     // Subtracts another sparse matrix
-    fn sub(&'a mut self, rhs: &'a Self) {
+    fn sub<S>(&'a mut self, rhs: &'a S)
+    where S: SparseMatrix<'a, Value = Self::Value> {
         for i in 0..rhs.n_rows() {
             for (&col, &val) in rhs.iter_row(i) {
                 let j = col.as_usize();
@@ -81,10 +83,6 @@ where Self: Sized + Clone {
     // Performs a matrix-vector product
     fn mvp<V: Vector<'a, Value = Self::Value>>(&'a self, rhs: &V) -> V {
         let mut ret = V::with_capacity(self.n_rows());
-        //self.iter().for_each(|(i, &j, &val)| ret.add_to(i, rhs.get(j.as_usize()) * val));
-        //for (i, &j, &val) in self.iter() {
-        //   ret.add_to(i, rhs.get(j.as_usize()) * val);
-        //}
         for i in 0..self.n_rows() {
             let mut sum = Self::Value::zero();
             for (&col, &val) in self.iter_row(i) {
@@ -99,7 +97,12 @@ where Self: Sized + Clone {
     // Returns the transpose of this matrix
     fn transpose(&'a self) -> Self {
         let mut ret = Self::with_capacity(self.n_non_zero_entries());
-        self.iter().for_each(|(i, &j, &val)| ret.set(j.as_usize(), i, val));
+        for i in 0..self.n_rows() {
+            for (&col, &val) in self.iter_row(i) {
+                let j = col.as_usize();
+                ret.set(j, i, val);
+            }
+        }
         ret
     }
 
@@ -140,12 +143,25 @@ where Self: Sized + Clone {
         1.0f64 - self.density()
     }
 
+    // Sorts entries of row i by columns in ascending order
+    fn sort_row(&mut self, i: usize);
+
+    // Sorts all entries of the matrix row-wise
+    fn sort(&mut self) {
+        for i in 0..self.n_rows() {
+            self.sort_row(i);
+        }
+    }
+
     // Returns a string with all values of row i including the zeroes
     // The entries have to be sorted first, otherwise the output will be corrupted
     fn to_string_row(&'a self, i: usize) -> String {
         let mut ret = String::from("");
         let mut j = Self::Index::ZERO;
         for (&col, &val) in self.iter_row(i) {
+            if col < j {
+                panic!("Entries of row {} are unsorted - use sort_row()", i);
+            }
             while j < col {
                 ret += "0 ";
                 j += Self::Index::ONE;
@@ -156,6 +172,16 @@ where Self: Sized + Clone {
         }
         ret
     }
+}
+
+// Additional trait for the column iterator
+// This is optional and not every sparse matrix implementation
+// needs to have a column iterator
+pub trait ColumnIter<'a, T, I>
+where T: 'a,
+      I: 'a {
+    type IterCol: Iterator<Item = (&'a I, &'a T)>;
+    fn iter_col(&'a self, row: usize) -> Self::IterCol;
 }
 
 // Since we are unable to implement a foreign trait we provide a macro

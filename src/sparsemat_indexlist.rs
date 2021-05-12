@@ -45,18 +45,15 @@ where T: ValueType,
     }
 
     pub fn assemble_column_info(&mut self) {
-        // Set up the column iterator if this has not been done yet
-        if self.rows.len() != self.columns.len() {
-            self.rows = vec![Self::UNSET; self.columns.len()];
-            for i in 0..self.n_rows() {
-                for index in self.indexlist.iter_row(i) {
-                    self.rows[index] = I::as_indextype(i);
-                }
+        self.rows.resize(self.columns.len(), Self::UNSET);
+        for i in 0..self.n_rows() {
+            for index in self.indexlist.iter_row(i) {
+                self.rows[index] = I::as_indextype(i);
             }
-            for col in self.columns.iter() {
-                let j = col.as_usize();
-                self.indexlist_col.push(j);
-            }
+        }
+        for col in self.columns.iter() {
+            let j = col.as_usize();
+            self.indexlist_col.push(j);
         }
     }
 
@@ -68,15 +65,6 @@ where T: ValueType,
         IterCol::<T, I> {
             mat: self,
             index_iter: self.indexlist_col.iter_row(col),
-        }
-    }
-
-    pub fn sort_row(&mut self, i: usize) {
-        let mut cols_vals = self.iter_row(i).map(|(&c, &v)| (c, v)).collect::<Vec<(I, T)>>();
-        cols_vals.as_mut_slice().sort_by(|(c1, _v1), (c2, _v2)| c1.partial_cmp(c2).unwrap());
-        for ((col, val), index) in cols_vals.iter().zip(self.indexlist.iter_row(i)) {
-            self.columns[index] = *col;
-            self.values[index] = *val;
         }
     }
 }
@@ -147,6 +135,15 @@ where T: 'a + ValueType,
     fn scale(&mut self, rhs: Self::Value) {
         for iter in self.values.iter_mut() {
             *iter *= rhs;
+        }
+    }
+
+    fn sort_row(&mut self, i: usize) {
+        let mut cols_vals = self.iter_row(i).map(|(&c, &v)| (c, v)).collect::<Vec<(I, T)>>();
+        cols_vals.as_mut_slice().sort_by(|(c1, _v1), (c2, _v2)| c1.partial_cmp(c2).unwrap());
+        for ((col, val), index) in cols_vals.iter().zip(self.indexlist.iter_row(i)) {
+            self.columns[index] = *col;
+            self.values[index] = *val;
         }
     }
 }

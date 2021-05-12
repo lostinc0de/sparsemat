@@ -81,9 +81,20 @@ mod tests {
         assert_eq!(iter_col.next(), Some((&0, &0.12)));
         assert_eq!(iter_col.next(), None);
 
+        // Test sorting functionality and conversion to CRS
+        let mut sp_crs = SparseMatCRS::<f32, u32>::from_sparsemat_index(&sp);
         sp.sort_row(1);
         let row_str = sp.to_string_row(1);
         assert_eq!(row_str, "0 2.24 4.12 ");
+
+        sp_crs.sort_row(1);
+        let row_str = sp_crs.to_string_row(1);
+        assert_eq!(row_str, "0 2.24 4.12 ");
+
+        // Add different matrix type
+        sp.add(&sp_crs);
+        let row_str = sp.to_string_row(1);
+        assert_eq!(row_str, "0 4.48 8.24 ");
     }
 
     #[test]
@@ -111,7 +122,6 @@ mod tests {
         let mvp = sp_crs.clone() * v;
         assert_eq!(mvp[0], 20.16);
         assert_eq!(sp_crs.density(), 5.0 / 16.0);
-        //sp.add(&sp_crs);
     }
 
     #[test]

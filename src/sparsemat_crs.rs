@@ -156,6 +156,17 @@ where T: 'a + ValueType,
             *iter *= rhs;
         }
     }
+
+    fn sort_row(&mut self, i: usize) {
+        let mut cols_vals = self.iter_row(i).map(|(&c, &v)| (c, v)).collect::<Vec<(I, T)>>();
+        cols_vals.as_mut_slice().sort_by(|(c1, _v1), (c2, _v2)| c1.partial_cmp(c2).unwrap());
+        let offset = self.offset_rows[i].as_usize();
+        for (count, (col, val)) in cols_vals.iter().enumerate() {
+            let index = offset + count;
+            self.columns[index] = *col;
+            self.values[index] = *val;
+        }
+    }
 }
 
 pub struct Iter<'a, T, I> {
