@@ -156,7 +156,11 @@ where T: 'a + ValueType,
             *iter *= rhs;
         }
     }
+}
 
+impl<'a, T, I> Sortable<'a> for SparseMatCRS<T, I>
+where T: 'a + ValueType,
+      I: 'a + IndexType {
     fn sort_row(&mut self, i: usize) {
         let mut cols_vals = self.iter_row(i).map(|(&c, &v)| (c, v)).collect::<Vec<(I, T)>>();
         cols_vals.as_mut_slice().sort_by(|(c1, _v1), (c2, _v2)| c1.partial_cmp(c2).unwrap());

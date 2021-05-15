@@ -139,18 +139,32 @@ where Self: Sized + Clone {
         nnz / n_entries
     }
 
+    // One minus the density of the matrix
     fn sparsity(&self) -> f64 {
         1.0f64 - self.density()
     }
 
-    // Sorts entries of row i by columns in ascending order
-    fn sort_row(&mut self, i: usize);
-
-    // Sorts all entries of the matrix row-wise
-    fn sort(&mut self) {
-        for i in 0..self.n_rows() {
-            self.sort_row(i);
+    // Check if entries in a row are sorted by columns in ascending order
+    fn is_sorted_row(&'a self, i: usize) -> bool {
+        let mut prev = 0;
+        for (&col, &_val) in self.iter_row(i) {
+            let j = col.as_usize();
+            if j < prev {
+                return false;
+            }
+            prev = j;
         }
+        true
+    }
+
+    // Check if all entries are sorted by columns in ascending order
+    fn is_sorted(&'a self) -> bool {
+        for i in 0..self.n_rows() {
+            if !self.is_sorted_row(i) {
+                return false;
+            }
+        }
+        true
     }
 
     // Returns a string with all values of row i including the zeroes
@@ -177,11 +191,24 @@ where Self: Sized + Clone {
 // Additional trait for the column iterator
 // This is optional and not every sparse matrix implementation
 // needs to have a column iterator
-pub trait ColumnIter<'a, T, I>
-where T: 'a,
-      I: 'a {
-    type IterCol: Iterator<Item = (&'a I, &'a T)>;
+pub trait ColumnIter<'a>
+where Self: SparseMatrix<'a> {
+    type IterCol: Iterator<Item = (&'a Self::Index, &'a Self::Value)>;
     fn iter_col(&'a self, row: usize) -> Self::IterCol;
+}
+
+// Additional trait for sorting all antries in a row
+pub trait Sortable<'a>
+where Self: SparseMatrix<'a> {
+    // Sorts entries of row i by columns in ascending order
+    fn sort_row(&mut self, i: usize);
+
+    // Sorts all entries of the matrix row-wise
+    fn sort(&mut self) {
+        for i in 0..self.n_rows() {
+            self.sort_row(i);
+        }
+    }
 }
 
 // Since we are unable to implement a foreign trait we provide a macro

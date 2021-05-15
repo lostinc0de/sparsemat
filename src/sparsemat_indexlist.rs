@@ -56,8 +56,13 @@ where T: ValueType,
             self.indexlist_col.push(j);
         }
     }
+}
 
-    pub fn iter_col(&self, col: usize) -> IterCol<T, I> {
+impl<'a, T, I> ColumnIter<'a> for SparseMatIndexList<T, I>
+where T: 'a + ValueType,
+      I: 'a + IndexType {
+    type IterCol = IterCol<'a, T, I>;
+    fn iter_col(&self, col: usize) -> IterCol<T, I> {
         // Check if the column info for the iterator is available and consistent
         if self.rows.len() != self.columns.len() {
             panic!("Column iterator not available - use assemble_column_info()");
@@ -65,6 +70,19 @@ where T: ValueType,
         IterCol::<T, I> {
             mat: self,
             index_iter: self.indexlist_col.iter_row(col),
+        }
+    }
+}
+
+impl<'a, T, I> Sortable<'a> for SparseMatIndexList<T, I>
+where T: 'a + ValueType,
+      I: 'a + IndexType {
+    fn sort_row(&mut self, i: usize) {
+        let mut cols_vals = self.iter_row(i).map(|(&c, &v)| (c, v)).collect::<Vec<(I, T)>>();
+        cols_vals.as_mut_slice().sort_by(|(c1, _v1), (c2, _v2)| c1.partial_cmp(c2).unwrap());
+        for ((col, val), index) in cols_vals.iter().zip(self.indexlist.iter_row(i)) {
+            self.columns[index] = *col;
+            self.values[index] = *val;
         }
     }
 }
@@ -135,15 +153,6 @@ where T: 'a + ValueType,
     fn scale(&mut self, rhs: Self::Value) {
         for iter in self.values.iter_mut() {
             *iter *= rhs;
-        }
-    }
-
-    fn sort_row(&mut self, i: usize) {
-        let mut cols_vals = self.iter_row(i).map(|(&c, &v)| (c, v)).collect::<Vec<(I, T)>>();
-        cols_vals.as_mut_slice().sort_by(|(c1, _v1), (c2, _v2)| c1.partial_cmp(c2).unwrap());
-        for ((col, val), index) in cols_vals.iter().zip(self.indexlist.iter_row(i)) {
-            self.columns[index] = *col;
-            self.values[index] = *val;
         }
     }
 }

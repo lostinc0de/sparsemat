@@ -6,6 +6,7 @@ use std::cmp::PartialEq;
 use std::cmp::PartialOrd;
 use std::fmt::Display;
 use std::fmt::Debug;
+use std::mem::size_of;
 
 // Trait used for converting the index type to usize and vice versa
 pub trait IndexType
@@ -18,19 +19,23 @@ where Self: Copy + PartialEq + AddAssign + PartialOrd + Display + Debug {
 }
 
 macro_rules! make_indextype {
-    ( $t:ty ) => {
+    ( $t: ty ) => {
         impl IndexType for $t {
             const MAX: $t = <$t>::MAX;
             const ZERO: $t = 0 as $t;
             const ONE: $t = 1 as $t;
+
             // For some reason these functions are not inlined by default
             // and performance is pretty low without the hint
             #[inline]
             fn as_usize(&self) -> usize {
+                assert!(size_of::<usize>() >= size_of::<$t>(), "Index type is larger than target usize");
                 *self as usize
             }
+
             #[inline]
             fn as_indextype(index: usize) -> $t {
+                assert!(size_of::<usize>() >= size_of::<$t>(), "Index type is larger than target usize");
                 index as $t
             }
         }
