@@ -1,7 +1,15 @@
 use crate::types::{IndexType, ValueType};
 use crate::rowindexlist::*;
 use crate::sparsematrix::*;
+use crate::densevec::DenseVec;
+use crate::sparsemat_crs::*;
 
+// A sparse matrix implementation utilizing the row-indexlist to store values
+// Appending values costs O(1) as well as iterating over entries
+// For tracking entries in the index list additional space is required
+// Depending on fragmentation performance maybe sufficient
+// but slower than common sparse matrix storage strategies like CRS
+// This struct is useful assembling a sparse matrix and can be converted to CRS afterwards
 #[derive(Clone, Debug)]
 pub struct SparseMatIndexList<T, I> {
     n_cols: usize,
@@ -44,17 +52,9 @@ where T: ValueType,
         index
     }
 
-    pub fn assemble_column_info(&mut self) {
-        self.rows.resize(self.columns.len(), Self::UNSET);
-        for i in 0..self.n_rows() {
-            for index in self.indexlist.iter_row(i) {
-                self.rows[index] = I::as_indextype(i);
-            }
-        }
-        for col in self.columns.iter() {
-            let j = col.as_usize();
-            self.indexlist_col.push(j);
-        }
+    // Creates a new sparse matrix with CRS format
+    pub fn to_crs(&self) -> SparseMatCRS<T, I> {
+        SparseMatCRS::from_sparsemat_index(&self)
     }
 }
 
@@ -62,6 +62,22 @@ impl<'a, T, I> ColumnIter<'a> for SparseMatIndexList<T, I>
 where T: 'a + ValueType,
       I: 'a + IndexType {
     type IterCol = IterCol<'a, T, I>;
+
+    fn assemble_column_info(&mut self) {
+        // Track the rows in a vec at the same positions as the columns
+        self.rows.resize(self.columns.len(), Self::UNSET);
+        for i in 0..self.n_rows() {
+            for index in self.indexlist.iter_row(i) {
+                self.rows[index] = I::as_indextype(i);
+            }
+        }
+        // Assemble an index list with the columns instead of the rows as key
+        for col in self.columns.iter() {
+            let j = col.as_usize();
+            self.indexlist_col.push(j);
+        }
+    }
+
     fn iter_col(&self, col: usize) -> IterCol<T, I> {
         // Check if the column info for the iterator is available and consistent
         if self.rows.len() != self.columns.len() {
@@ -79,7 +95,7 @@ where T: 'a + ValueType,
       I: 'a + IndexType {
     fn sort_row(&mut self, i: usize) {
         let mut cols_vals = self.iter_row(i).map(|(&c, &v)| (c, v)).collect::<Vec<(I, T)>>();
-        cols_vals.as_mut_slice().sort_by(|(c1, _v1), (c2, _v2)| c1.partial_cmp(c2).unwrap());
+        cols_vals.sort_by(|(c1, _v1), (c2, _v2)| c1.partial_cmp(c2).unwrap());
         for ((col, val), index) in cols_vals.iter().zip(self.indexlist.iter_row(i)) {
             self.columns[index] = *col;
             self.values[index] = *val;
@@ -90,7 +106,6 @@ where T: 'a + ValueType,
 impl<'a, T, I> SparseMatrix<'a> for SparseMatIndexList<T, I>
 where T: 'a + ValueType,
       I: 'a + IndexType {
-
     type Value = T;
     type Index = I;
     type Iter = Iter<'a, T, I>;
@@ -163,8 +178,7 @@ pub struct IterRow<'a, T, I> {
 }
 
 impl<'a, T, I> Iterator for IterRow<'a, T, I>
-where T: ValueType,
-      I: IndexType {
+where I: IndexType {
     type Item = (&'a I, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -181,8 +195,7 @@ pub struct IterCol<'a, T, I> {
 }
 
 impl<'a, T, I> Iterator for IterCol<'a, T, I>
-where T: ValueType,
-      I: IndexType {
+where I: IndexType {
     type Item = (&'a I, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {

@@ -1,6 +1,7 @@
 use crate::types::{IndexType, ValueType};
 use crate::sparsematrix::*;
 use crate::sparsemat_indexlist::*;
+use crate::densevec::DenseVec;
 
 // Implementation of a sparse matrix with compressed row storage format
 #[derive(Clone, Debug)]
@@ -10,6 +11,8 @@ pub struct SparseMatCRS<T, I> {
     values: Vec<T>,
     columns: Vec<I>,
     offset_rows: Vec<I>,
+    rows: Vec<I>,
+    offset_cols: Vec<I>,
 }
 
 impl<T, I> SparseMatCRS<T, I>
@@ -17,7 +20,7 @@ where T: ValueType,
       I: IndexType {
 
     // Create from sparse matrix with index list
-    pub fn from_sparsemat_index(rhs: &SparseMatIndexList<T, I>) -> Self {
+    pub(crate) fn from_sparsemat_index(rhs: &SparseMatIndexList<T, I>) -> Self {
         if rhs.n_non_zero_entries() > 0 {
             let mut values = Vec::<T>::with_capacity(rhs.n_non_zero_entries());
             let mut columns = Vec::<I>::with_capacity(rhs.n_non_zero_entries());
@@ -36,6 +39,8 @@ where T: ValueType,
                 values: values,
                 columns: columns,
                 offset_rows: offset_rows,
+                rows: Vec::<I>::new(),
+                offset_cols: Vec::<I>::new(),
             }
         } else {
             SparseMatCRS::<T, I>::new()
@@ -119,6 +124,8 @@ where T: 'a + ValueType,
             values: Vec::<T>::with_capacity(cap),
             columns: Vec::<I>::with_capacity(cap),
             offset_rows: Vec::<I>::with_capacity(cap + 1),
+            rows: Vec::<I>::new(),
+            offset_cols: Vec::<I>::new(),
         }
     }
 

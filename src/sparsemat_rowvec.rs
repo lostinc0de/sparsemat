@@ -1,5 +1,6 @@
 use crate::types::{IndexType, ValueType};
 use crate::sparsematrix::*;
+use crate::densevec::DenseVec;
 
 // A sparse matrix implementation where each row is stored in separate vec
 // This implementation makes at least two allocations each row
