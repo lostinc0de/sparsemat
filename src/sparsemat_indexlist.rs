@@ -78,7 +78,11 @@ where T: 'a + ValueType,
         }
     }
 
-    fn iter_col(&self, col: usize) -> IterCol<T, I> {
+    fn has_iter_col(&self) -> bool {
+        self.rows.len() > 0
+    }
+
+    fn iter_col(&'a self, col: usize) -> Self::IterCol {
         // Check if the column info for the iterator is available and consistent
         if self.rows.len() != self.columns.len() {
             panic!("Column iterator not available - use assemble_column_info()");

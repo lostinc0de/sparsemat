@@ -1,7 +1,7 @@
 use crate::vector::*;
 use crate::types::ValueType;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DenseVec<T> {
     values: Vec<T>,
 }

@@ -81,7 +81,7 @@ mod tests {
         assert_eq!(iter_col.next(), None);
 
         // Test sorting functionality and conversion to CRS
-        let sp_crs = SparseMatCRS::<f32, u32>::from_sparsemat_index(&sp);
+        let sp_crs = sp.to_crs();
         let row_str = sp.to_string_row(1);
         assert_eq!(row_str, "0 2.24 4.12 ");
         let row_str = sp_crs.to_string_row(1);
@@ -103,19 +103,18 @@ mod tests {
 
     #[test]
     fn check_sparsemat_crs() {
-        let mut sp = SparseMatIndexList::<f32, u32>::with_capacity(3);
-        sp.add_to(0, 1, 4.2);
-        sp.add_to(2, 2, 2.12);
-        sp.add_to(1, 2, 4.12);
-        sp.add_to(3, 2, 1.12);
-        sp.add_to(3, 3, 5.12);
-        let sp_crs = SparseMatCRS::<f32, u32>::from_sparsemat_index(&sp);
+        let mut sp_crs = SparseMatCRS::<f32, u32>::with_capacity(3);
+        sp_crs.add_to(0, 1, 4.2);
+        sp_crs.add_to(2, 2, 2.12);
+        sp_crs.add_to(1, 2, 4.12);
+        sp_crs.add_to(3, 2, 1.12);
+        sp_crs.add_to(3, 3, 5.12);
         let mut iter = sp_crs.iter();
         assert_eq!(iter.next(), Some((0, &1, &4.2)));
         assert_eq!(iter.next(), Some((1, &2, &4.12)));
         assert_eq!(iter.next(), Some((2, &2, &2.12)));
-        assert_eq!(iter.next(), Some((3, &2, &1.12)));
         assert_eq!(iter.next(), Some((3, &3, &5.12)));
+        assert_eq!(iter.next(), Some((3, &2, &1.12)));
         assert_eq!(iter.next(), None);
         let mut iter_row = sp_crs.iter_row(0);
         assert_eq!(iter_row.next(), Some((&1, &4.2)));

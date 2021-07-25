@@ -32,6 +32,18 @@ where T: ValueType,
                     values.push(val);
                 }
             }
+            let mut rows = Vec::<I>::new();
+            let mut offset_cols = Vec::<I>::new();
+            if rhs.has_iter_col() {
+                rows = Vec::<I>::with_capacity(rhs.n_non_zero_entries());
+                offset_cols = Vec::<I>::with_capacity(rhs.n_cols() + 1);
+                for j in 0..rhs.n_cols() {
+                    offset_cols.push(I::as_indextype(rows.len()));
+                    for (&row, &_val) in rhs.iter_col(j) {
+                        rows.push(row);
+                    }
+                }
+            }
             offset_rows.push(I::as_indextype(columns.len()));
             SparseMatCRS::<T, I> {
                 n_rows: offset_rows.len() - 1,
@@ -39,8 +51,8 @@ where T: ValueType,
                 values: values,
                 columns: columns,
                 offset_rows: offset_rows,
-                rows: Vec::<I>::new(),
-                offset_cols: Vec::<I>::new(),
+                rows: rows,
+                offset_cols: offset_cols,
             }
         } else {
             SparseMatCRS::<T, I>::new()
@@ -177,6 +189,35 @@ where T: 'a + ValueType,
             self.columns[index] = *col;
             self.values[index] = *val;
         }
+    }
+}
+
+impl<'a, T, I> ColumnIter<'a> for SparseMatCRS<T, I>
+where T: 'a + ValueType,
+      I: 'a + IndexType {
+    type IterCol = std::iter::Zip<std::slice::Iter<'a, I>, std::slice::Iter<'a, T>>;
+
+    fn assemble_column_info(&mut self) {
+        for i in 0..self.n_rows() {
+            for (&col, &_val) in self.iter_row(i) {
+                let j = col.as_usize();
+                //TODO
+            }
+        }
+    }
+
+    fn has_iter_col(&self) -> bool {
+        self.rows.len() > 0
+    }
+
+    fn iter_col(&'a self, col: usize) -> Self::IterCol {
+        // Check if the column info for the iterator is available and consistent
+        if self.rows.len() != self.columns.len() {
+            panic!("Column iterator not available - use assemble_column_info()");
+        }
+        let start = self.offset_cols[col].as_usize();
+        let end = self.offset_cols[col + 1].as_usize();
+        self.rows[start..end].iter().zip(self.values[start..end].iter())
     }
 }
 

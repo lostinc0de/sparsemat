@@ -272,8 +272,13 @@ where Self: Sized + Clone {
 pub trait ColumnIter<'a>
 where Self: SparseMatrix<'a> {
     type IterCol: Iterator<Item = (&'a Self::Index, &'a Self::Value)>;
+
+    // Assembles the column iterator
     fn assemble_column_info(&mut self);
-    fn iter_col(&'a self, row: usize) -> Self::IterCol;
+    // Checks if column iterator is available
+    fn has_iter_col(&self) -> bool;
+    // Returns the column iterator if assembled
+    fn iter_col(&'a self, col: usize) -> Self::IterCol;
 }
 
 // Additional trait for sorting entries
