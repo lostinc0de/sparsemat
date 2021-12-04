@@ -1,10 +1,62 @@
-use std::iter::Map;
 use std::string::String;
 use std::fs::File;
 use std::io::Write;
+use std::fmt;
 use crate::types::{IndexType, ValueType};
 use crate::sparsevec::SparseVec;
 use crate::vector::Vector;
+
+#[derive(Clone, Debug)]
+pub struct SparseMatError {
+    msg: String,
+}
+
+impl SparseMatError {
+    pub fn new(error: &str) -> SparseMatError {
+        SparseMatError {
+            msg: String::from(error),
+        }
+    }
+}
+
+impl fmt::Display for SparseMatError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.msg)
+    }
+}
+
+pub struct Iter<'a, M>
+where M: SparseMatrix<'a>,
+      M::Value: ValueType,
+      M::Index: IndexType {
+    mat: &'a M,
+    row: usize,
+    iter_row: M::IterRow,
+}
+
+impl<'a, M> Iterator for Iter<'a, M>
+where M: SparseMatrix<'a>,
+      M::Value: ValueType,
+      M::Index: IndexType {
+    type Item = (usize, usize, &'a M::Value);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut ret = match self.iter_row.next() {
+                Some((col, val)) => Some((self.row, col.as_usize(), val)),
+                None => None
+        };
+        // Switch to next row if necessary
+        while ret == None && self.row < (self.mat.n_rows() - 1) {
+            self.row += 1;
+            self.iter_row = self.mat.iter_row(self.row);
+            ret = match self.iter_row.next() {
+                Some((col, val)) => Some((self.row, col.as_usize(), val)),
+                None => None
+            };
+        }
+        ret
+    }
+}
 
 // Interface for row major sparse matrix types
 pub trait SparseMatrix<'a>
@@ -17,14 +69,14 @@ where Self: Sized + Clone {
 
     // Iterator for accessing values associated to row and column
     type IterRow: Iterator<Item = (&'a Self::Index, &'a Self::Value)>;
-    type Iter: Iterator<Item = (usize, &'a Self::Index, &'a Self::Value)>;
-    
     fn iter_row(&'a self, row: usize) -> Self::IterRow;
-    fn iter(&'a self) -> Self::Iter;
 
-    // Iterator for accessing all elements as values instead of references
-    fn iter_val(&'a self) -> Map<Self::Iter, fn((usize, &'a Self::Index, &'a Self::Value)) -> (usize, usize, Self::Value)> {
-        self.iter().map(|(i, &j, &val)| (i, j.as_usize(), val))
+    fn iter(&'a self) -> Iter<Self> {
+        Iter {
+            mat: &self,
+            row: 0,
+            iter_row: self.iter_row(0),
+        }
     }
 
     // Creates a new sparse matrix with reserved space for cap non-zero entries
@@ -64,6 +116,10 @@ where Self: Sized + Clone {
     // Scales all values by a factor
     fn scale(&mut self, rhs: Self::Value);
 
+    fn empty(&self) -> bool {
+        self.n_rows() == 0
+    }
+
     // Adds another sparse matrix
     fn add<S>(&'a mut self, rhs: &'a S)
     where S: SparseMatrix<'a, Value = Self::Value> {
@@ -101,6 +157,19 @@ where Self: Sized + Clone {
         ret
     }
 
+    // Performs an inner product with two vectors returning a scalar
+    fn inner_prod<V>(&'a self, lhs: &V, rhs: &V) -> Self::Value
+    where V: Vector<'a, Value = Self::Value> {
+        let mut sum = Self::Value::zero();
+        for i in 0..self.n_rows() {
+            for (&col, &val) in self.iter_row(i) {
+                let j = col.as_usize();
+                sum += lhs.get(i) * val * rhs.get(j);
+            }
+        }
+        sum
+    }
+
     // Returns the transpose of this matrix
     fn transpose(&'a self) -> Self {
         let mut ret = Self::with_capacity(self.n_non_zero_entries());
@@ -114,10 +183,10 @@ where Self: Sized + Clone {
     }
 
     // Performs a product with another matrix using the column iterator
-    fn prod<M>(&'a self, rhs: &'a M) -> Self
+    fn prod<M>(&'a self, rhs: &'a M) -> Result<Self, SparseMatError>
     where M: ColumnIter<'a, Index = Self::Index, Value = Self::Value> {
         if self.n_rows() != rhs.n_cols() || self.n_cols() != rhs.n_rows() {
-            panic!("Dimension mismatch");
+            return Err(SparseMatError::new("Dimension mismatch"));
         }
         let mut ret = Self::with_capacity(self.n_non_zero_entries());
         for i in 0..self.n_rows() {
@@ -125,7 +194,7 @@ where Self: Sized + Clone {
             cols_vals_i.sort_by(|(c1, _v1), (c2, _v2)| c1.partial_cmp(c2).unwrap());
             for j in 0..rhs.n_cols() {
                 let mut sum = Self::Value::zero();
-                rhs.iter_col(j).for_each(|(&row, &val_rhs)| {
+                rhs.iter_col(j).unwrap().for_each(|(&row, &val_rhs)| {
                     cols_vals_i.iter().take_while(|(col, _v)| *col <= row).for_each(|(col, val)| {
                         if *col == row{
                             sum += *val * val_rhs;
@@ -137,14 +206,17 @@ where Self: Sized + Clone {
                 }
             }
         }
-        ret
+        Ok(ret)
     }
 
     // Checks if the matrix is symmetric
     fn is_symmetric(&'a self) -> bool {
-        for (i, &j, &val) in self.iter() {
-            if self.get(j.as_usize(), i) != val {
-                return false;
+        for i in 0..self.n_rows() {
+            for (&col, &val) in self.iter_row(i) {
+                let j = col.as_usize();
+                if self.get(j, i) != val {
+                    return false;
+                }
             }
         }
         true
@@ -275,10 +347,8 @@ where Self: SparseMatrix<'a> {
 
     // Assembles the column iterator
     fn assemble_column_info(&mut self);
-    // Checks if column iterator is available
-    fn has_iter_col(&self) -> bool;
     // Returns the column iterator if assembled
-    fn iter_col(&'a self, col: usize) -> Self::IterCol;
+    fn iter_col(&'a self, col: usize) -> Result<Self::IterCol, SparseMatError>;
 }
 
 // Additional trait for sorting entries

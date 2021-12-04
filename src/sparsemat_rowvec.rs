@@ -54,16 +54,7 @@ where T: 'a + ValueType,
 
     type Value = T;
     type Index = I;
-    type Iter = Iter<'a, T, I>;
     type IterRow = std::iter::Zip<std::slice::Iter<'a, I>, std::slice::Iter<'a, T>>;
-
-    fn iter(&'a self) -> Self::Iter {
-        Iter::<T, I> {
-            mat: self,
-            row: 0,
-            pos: 0,
-        }
-    }
 
     fn iter_row(&'a self, row: usize) -> Self::IterRow {
         if row < self.n_rows() {
@@ -129,33 +120,6 @@ where T: 'a + ValueType,
         for (index, (col, val)) in cols_vals.iter().enumerate() {
             self.columns[i][index] = *col;
             self.values[i][index] = *val;
-        }
-    }
-}
-
-pub struct Iter<'a, T, I> {
-    mat: &'a SparseMatRowVec<T, I>,
-    row: usize,
-    pos: usize,
-}
-
-impl<'a, T, I> Iterator for Iter<'a, T, I>
-where T: ValueType,
-      I: IndexType {
-    type Item = (usize, &'a I, &'a T);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while self.row < (self.mat.n_rows() - 1)
-               && self.pos == self.mat.columns[self.row].len() {
-            self.row += 1;
-            self.pos = 0;
-        }
-        let index = self.pos;
-        if index < self.mat.columns[self.row].len() {
-            self.pos += 1;
-            Some((self.row, &self.mat.columns[self.row][index], &self.mat.values[self.row][index]))
-        } else {
-            None
         }
     }
 }

@@ -47,17 +47,18 @@ macro_rules! make_indextype {
 make_indextype!(u8);
 make_indextype!(u16);
 make_indextype!(u32);
+make_indextype!(u64);
 make_indextype!(usize);
 
 // Shortcut for value type trait bounds
 pub trait ValueType
-where Self: Copy + From<u8> + AddAssign + SubAssign + MulAssign + Mul<Output = Self> + Div<Output = Self> + PartialEq + Sum + Into<f64> + Display + Debug {
+where Self: Copy + From<u8> + AddAssign + SubAssign + MulAssign + Mul<Output = Self> + Div<Output = Self> + PartialEq + Sum + Into<f64> + Display + Debug + Send {
     fn zero() -> Self;
     fn one() -> Self;
 }
 
 impl<T> ValueType for T
-where T: Copy + From<u8> + AddAssign + SubAssign + MulAssign + Mul<Output = Self> + Div<Output = Self> + PartialEq + Sum + Into<f64> + Display + Debug {
+where T: Copy + From<u8> + AddAssign + SubAssign + MulAssign + Mul<Output = Self> + Div<Output = Self> + PartialEq + Sum + Into<f64> + Display + Debug + Send {
     fn zero() -> Self {
         T::from(0u8)
     }

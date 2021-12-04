@@ -5,11 +5,20 @@ pub mod sparsematrix;
 pub mod sparsemat_indexlist;
 pub mod sparsemat_crs;
 pub mod sparsemat_rowvec;
+pub mod sparsemat_par;
 #[macro_use]
 pub mod vector;
 pub mod densevec;
 pub mod sparsevec;
 pub mod linearsolver;
+
+pub use self::sparsematrix::*;
+pub use self::sparsemat_indexlist::*;
+pub use self::sparsemat_crs::*;
+pub use self::sparsemat_rowvec::*;
+pub use self::sparsevec::*;
+pub use self::vector::*;
+pub use self::densevec::*;
 
 #[cfg(test)]
 mod tests {
@@ -17,6 +26,7 @@ mod tests {
     use crate::sparsemat_indexlist::*;
     use crate::sparsemat_crs::*;
     use crate::sparsemat_rowvec::*;
+    use crate::sparsemat_par::*;
     use crate::rowindexlist::*;
     use crate::sparsevec::*;
     use crate::vector::*;
@@ -55,10 +65,10 @@ mod tests {
         sp.set(0, 0, 7.12);
         assert_eq!(sp.get(0, 0), 7.12);
         let mut iter = sp.iter();
-        assert_eq!(iter.next(), Some((0, &1, &4.2)));
-        assert_eq!(iter.next(), Some((0, &2, &0.12)));
-        assert_eq!(iter.next(), Some((0, &0, &7.12)));
-        assert_eq!(iter.next(), Some((1, &2, &4.12)));
+        assert_eq!(iter.next(), Some((0, 1, &4.2)));
+        assert_eq!(iter.next(), Some((0, 2, &0.12)));
+        assert_eq!(iter.next(), Some((0, 0, &7.12)));
+        assert_eq!(iter.next(), Some((1, 2, &4.12)));
         let mut iter_row = sp.iter_row(2);
         assert_eq!(iter_row.next(), Some((&2, &2.12)));
         let sum = sp.clone() + sp.clone();
@@ -74,7 +84,7 @@ mod tests {
 
         // Test column iter
         sp.assemble_column_info();
-        let mut iter_col = sp.iter_col(2);
+        let mut iter_col = sp.iter_col(2).unwrap();
         assert_eq!(iter_col.next(), Some((&1, &4.12)));
         assert_eq!(iter_col.next(), Some((&2, &2.12)));
         assert_eq!(iter_col.next(), Some((&0, &0.12)));
@@ -88,7 +98,7 @@ mod tests {
         assert_eq!(row_str, "0 2.24 4.12 ");
 
         // Test matrix product
-        let mp = sp_crs.prod(&sp);
+        let mp = sp_crs.prod(&sp).unwrap();
         assert_eq!(mp.get(1, 2), 17.9632);
 
         // Add different matrix type
@@ -110,12 +120,28 @@ mod tests {
         sp_crs.add_to(3, 2, 1.12);
         sp_crs.add_to(3, 3, 5.12);
         let mut iter = sp_crs.iter();
-        assert_eq!(iter.next(), Some((0, &1, &4.2)));
-        assert_eq!(iter.next(), Some((1, &2, &4.12)));
-        assert_eq!(iter.next(), Some((2, &2, &2.12)));
-        assert_eq!(iter.next(), Some((3, &3, &5.12)));
-        assert_eq!(iter.next(), Some((3, &2, &1.12)));
+        assert_eq!(iter.next(), Some((0, 1, &4.2)));
+        assert_eq!(iter.next(), Some((1, 2, &4.12)));
+        assert_eq!(iter.next(), Some((2, 2, &2.12)));
+        assert_eq!(iter.next(), Some((3, 3, &5.12)));
+        assert_eq!(iter.next(), Some((3, 2, &1.12)));
         assert_eq!(iter.next(), None);
+        //let mut iter_all = sp_crs.iter_all();
+        //assert_eq!(iter_all.next(), Some((0, 1, &4.2)));
+        //assert_eq!(iter_all.next(), Some((1, 2, &4.12)));
+        //assert_eq!(iter_all.next(), Some((2, 2, &2.12)));
+        //assert_eq!(iter_all.next(), Some((3, 3, &5.12)));
+        //assert_eq!(iter_all.next(), Some((3, 2, &1.12)));
+        //assert_eq!(iter_all.next(), None);
+
+        // Test column iter
+        sp_crs.assemble_column_info();
+        let mut iter_col = sp_crs.iter_col(2).unwrap();
+        assert_eq!(iter_col.next(), Some((&1, &4.12)));
+        assert_eq!(iter_col.next(), Some((&2, &2.12)));
+        assert_eq!(iter_col.next(), Some((&3, &1.12)));
+        assert_eq!(iter_col.next(), None);
+
         let mut iter_row = sp_crs.iter_row(0);
         assert_eq!(iter_row.next(), Some((&1, &4.2)));
         assert_eq!(iter_row.next(), None);
@@ -141,10 +167,10 @@ mod tests {
         assert_eq!(sp.get(0, 0), 7.12);
         assert_eq!(sp.get(0, 1), 4.2);
         let mut iter = sp.iter();
-        assert_eq!(iter.next(), Some((0, &1, &4.2)));
-        assert_eq!(iter.next(), Some((0, &2, &0.12)));
-        assert_eq!(iter.next(), Some((0, &0, &7.12)));
-        assert_eq!(iter.next(), Some((1, &2, &4.12)));
+        assert_eq!(iter.next(), Some((0, 1, &4.2)));
+        assert_eq!(iter.next(), Some((0, 2, &0.12)));
+        assert_eq!(iter.next(), Some((0, 0, &7.12)));
+        assert_eq!(iter.next(), Some((1, 2, &4.12)));
         let v = DenseVec::from_vec(vec![2.0, 4.8, 1.2]);
         let mvp = sp.mvp(&v);
         assert_eq!(mvp.get(0), 34.544);
@@ -152,8 +178,32 @@ mod tests {
     }
 
     #[test]
+    fn check_sparsemat_par() {
+        let mut mat_par = SparseMatPar::<SparseMatIndexList::<f32, u32>>::with_sub_matrices(4, 16);
+        mat_par.add_to(0, 1, 4.2);
+        mat_par.add_to(1, 2, 4.12);
+        mat_par.add_to(2, 2, 2.12);
+        mat_par.add_to(1, 1, 1.12);
+        *mat_par.get_mut(1, 1) += 1.12;
+        *mat_par.get_mut(0, 2) += 0.12;
+        *mat_par.get_mut(0, 0) = 8.12;
+        mat_par.set(0, 0, 7.12);
+        assert_eq!(mat_par.get(0, 0), 7.12);
+        assert_eq!(mat_par.get(0, 1), 4.2);
+        let mut iter = mat_par.iter();
+        assert_eq!(iter.next(), Some((0, 1, &4.2)));
+        assert_eq!(iter.next(), Some((0, 2, &0.12)));
+        assert_eq!(iter.next(), Some((0, 0, &7.12)));
+        assert_eq!(iter.next(), Some((1, 2, &4.12)));
+        let v = DenseVec::from_vec(vec![2.0, 4.8, 1.2]);
+        let mvp = mat_par.mvp(&v);
+        assert_eq!(mvp.get(0), 34.544);
+        assert_eq!(mat_par.density(), 6.0 / 9.0);
+    }
+
+    #[test]
     fn check_rowindexlist() {
-        let mut list = RowIndexList::<u16>::new();
+        let mut list = IndexList::<u16>::new();
         list.push(1);
         list.push(1);
         list.push(2);

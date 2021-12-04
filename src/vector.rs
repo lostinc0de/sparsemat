@@ -30,6 +30,12 @@ where Self: Sized + Clone {
     // Appends entry if it does not exist yet
     fn get_mut(&mut self, i: usize) -> &mut Self::Value;
 
+    fn add(&'a mut self, rhs: &Self);
+
+    fn sub(&'a mut self, rhs: &Self);
+
+    fn scale(&'a mut self, rhs: Self::Value);
+
     // Sets value at position i to val
     fn set(&mut self, i: usize, val: Self::Value) {
         *self.get_mut(i) = val;
@@ -55,10 +61,4 @@ where Self: Sized + Clone {
     fn norm(&'a self) -> f64 {
         f64::sqrt(self.norm_squared().into())
     }
-
-    fn add(&'a mut self, rhs: &Self);
-
-    fn sub(&'a mut self, rhs: &Self);
-
-    fn scale(&'a mut self, rhs: Self::Value);
 }

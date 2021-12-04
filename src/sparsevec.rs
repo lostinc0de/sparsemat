@@ -85,14 +85,15 @@ where T: 'a + ValueType,
 
     fn from_vec(vec: Vec<T>) -> Self {
         let mut indices = Vec::<I>::with_capacity(vec.len());
-        for i in 0..vec.len() {
+        let len = vec.len();
+        for i in 0..len {
             let ind = I::as_indextype(i);
             indices.push(ind);
         }
         Self {
             values: vec,
             indices: indices,
-            dim: 0,
+            dim: len,
         }
     }
 
