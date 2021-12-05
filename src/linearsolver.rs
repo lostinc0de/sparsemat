@@ -3,36 +3,6 @@ use crate::sparsematrix::*;
 use crate::vector::*;
 use crate::densevec::*;
 
-/*
-pub trait LinearSolver {
-    fn solve<M, V>(mat: &M, b: &V, x: &mut V)
-    where for<'a> M: SparseMatrix<'a>,
-          for<'a> V: Vector<'a, Value = <M as SparseMatrix<'a>>::Value>;
-}
-
-pub struct ConjugateGradient {
-}
-
-impl LinearSolver for ConjugateGradient {
-    fn solve<M, V>(mat: &M, b: &V, x: &mut V)
-    where for<'a> M: SparseMatrix<'a>,
-          for<'a> V: Vector<'a, Value = <M as SparseMatrix<'a>>::Value> {
-        if mat.n_rows() != mat.n_cols() {
-            panic!("Matrix is not symmetric");
-        }
-        if mat.n_rows() != b.n_entries()
-            || mat.n_rows() != x.n_entries() {
-            panic!("Matrix and vector size mismatch");
-        }
-        let len = mat.n_rows();
-        // r = b - A * x
-        let mut r = b.clone();
-        let tmp = mat.mvp(x).clone();
-        //r.sub(&tmp);
-    }
-}
-*/
-
 pub trait LinearSolver {
     fn solve<'a, M>(&self, mat: &'a M, b: &DenseVec<M::Value>, x: &mut DenseVec<M::Value>)
     where M: SparseMatrix<'a>,

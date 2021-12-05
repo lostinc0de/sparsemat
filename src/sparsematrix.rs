@@ -310,7 +310,7 @@ where Self: Sized + Clone {
         ret
     }
 
-    // Writes sparse matrix structure to a black / white BMP-file
+    // Writes sparse matrix structure to a black / white PBM-file
     fn to_pbm(&'a self, filename: String) {
         let mut file = File::create(filename).unwrap();
         file.write_all(b"P1\n").unwrap();

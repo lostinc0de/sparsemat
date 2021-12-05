@@ -1,5 +1,5 @@
 pub mod types;
-pub mod rowindexlist;
+pub mod indexlist;
 #[macro_use]
 pub mod sparsematrix;
 pub mod sparsemat_indexlist;
@@ -27,7 +27,7 @@ mod tests {
     use crate::sparsemat_crs::*;
     use crate::sparsemat_rowvec::*;
     use crate::sparsemat_par::*;
-    use crate::rowindexlist::*;
+    use crate::indexlist::*;
     use crate::sparsevec::*;
     use crate::vector::*;
     use crate::densevec::*;
@@ -202,7 +202,7 @@ mod tests {
     }
 
     #[test]
-    fn check_rowindexlist() {
+    fn check_indexlist() {
         let mut list = IndexList::<u16>::new();
         list.push(1);
         list.push(1);

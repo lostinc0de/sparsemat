@@ -1,5 +1,5 @@
 use crate::types::{IndexType, ValueType};
-use crate::rowindexlist::IndexList;
+use crate::indexlist::IndexList;
 use crate::sparsematrix::*;
 use crate::sparsemat_indexlist::*;
 use crate::densevec::DenseVec;
@@ -205,7 +205,7 @@ where T: 'a + ValueType,
 
 pub struct IterCol<'a, T, I> {
     mat: &'a SparseMatCRS<T, I>,
-    index_iter: crate::rowindexlist::IterRow<'a, I>,
+    index_iter: crate::indexlist::IterRow<'a, I>,
 }
 
 impl<'a, T, I> Iterator for IterCol<'a, T, I>
